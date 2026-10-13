@@ -179,3 +179,14 @@ println("Immune: ", R)
 
 # Check if the population count is correct
 println("Population check: ", S + I + R == nagents(model))
+
+# Run the simulation for 50 ticks
+for t in 1:50
+  # Move the simulation forward by one tick
+    step!(model, 1)    
+  N=nagents(model)
+ #check population consistency
+ @assert S+I+R == N
+ # Display the results
+   println("Tick: ", t," | S: ", S," | I: ", I," | R: ", R," | Total: ", N)
+end
