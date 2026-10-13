@@ -13,6 +13,8 @@ using DataFrames
     infection_timer::Int = 0
     immunity_timer::Int  = 0
     age::Int             = 0
+    wearing_mask::Bool   = false 
+    vaccinated::Bool    = false
 end
 
 # ----------------------------------------------------
@@ -26,6 +28,10 @@ struct ModelParams
     birth_rate::Float64       # Probability of reproduction per tick (e.g., 0.01)
     carrying_capacity::Int    # Max population cap (e.g., 300)
     max_age::Int              # Max lifetime in ticks (e.g., 200)
+    mask_effectiveness::Float64 # Mask efficacity
+    mask_probability::Float64 # Probabilty that a person wear a mask
+    vaccine_effectiveness::Float64 # efficacity of the vaccine
+    vaccination_probability::Float64
 end
 
 function initialize_model(;
@@ -39,7 +45,11 @@ function initialize_model(;
     birth_rate = 0.015,
     carrying_capacity = 300,
     max_age = 110,
-    seed = 42
+    seed = 42 ,
+    mask_probability= 0.5 ,
+    mask_effectiveness= 0.5,
+    vaccine_effectiveness= 0.7 , 
+    vaccination_probability= 0.6
 )
     # NetLogo uses a periodic toroidal grid where multiple agents can share a patch
     space = GridSpace(dims; periodic = true)
@@ -51,17 +61,23 @@ function initialize_model(;
         immunity_duration,
         birth_rate,
         carrying_capacity,
-        max_age
+        max_age,
+        mask_effectiveness,
+        mask_probability ,
+        vaccine_effectiveness ,
+        vaccination_probability
     )
     
-    rng = Xoshiro(seed)
+    rng = Xoshiro(seed) # Generate randomly
     model = StandardABM(Person, space; agent_step!, properties, rng)
 
     # Populate agents randomly
     for i in 1:n_agents
         status = (i <= initial_infected) ? infected : susceptible
         rand_age = rand(rng, 1:max_age)
-        add_agent_single!(model; status = status, age = rand_age)
+        wears_mask=rand(rng)<mask_probability
+        is_vaccinated=rand(rng)< vaccination_probability
+        add_agent_single!(model; status = status, age = rand_age,wearing_mask=wears_mask,vaccinated=is_vaccinated)
     end
 
     return model
@@ -104,13 +120,35 @@ function agent_step!(agent::Person, model)
         end
     end
 
-    # D. Transmission: An infected agent infects susceptible co-located neighbors
+    # D. Transmission: An infected agent infects susceptible co-located neighbors /case of Wearing Mask 
     if agent.status == infected
         # Find all agents occupying the same patch / grid cell
         for neighbor in agents_in_position(agent, model)
-            if neighbor.status == susceptible && rand(abmrng(model)) < params.infectiousness
-                neighbor.status = infected
-                neighbor.infection_timer = 0
+            if neighbor.status == susceptible 
+                # Normal probabilty of transmission : 
+                transmission_probability=params.infectiousness
+
+                if agent.wearing_mask
+                    transmission_probability*=(1-params.mask_effectiveness)
+                end
+                
+                
+                if neighbor.wearing_mask # If the susceptible person wear also a mask
+                    transmission_probability*=(1-params.mask_effectiveness)
+                end
+
+
+                if neighbor.vaccinated  # If the susceptible  is vaccinated 
+                    transmission_probability *=(1- params.vaccine_effectiveness)
+                end    
+
+    
+
+                if rand(abmrng(model)) < transmission_probability   
+                    neighbor.status = infected
+                    neighbor.infection_timer = 0
+                
+                end
             end
         end
     end
@@ -119,7 +157,25 @@ function agent_step!(agent::Person, model)
     if nagents(model) < params.carrying_capacity
         if rand(abmrng(model)) < params.birth_rate
             # Newborn placed at the parent's position
-            add_agent!(agent.pos, model; status = susceptible, age = 0)
+            add_agent!(agent.pos, model; status = susceptible, age = 0,wearing_mask=false,vaccinated=false)
         end
     end
 end
+
+# Create the model
+model = initialize_model()
+
+# Count the total number of agents
+println("Total population: ", nagents(model))
+
+# Count agents by health status
+S = count(a -> a.status == susceptible, allagents(model))
+I = count(a -> a.status == infected, allagents(model))
+R = count(a -> a.status == immune, allagents(model))
+
+println("Susceptible: ", S)
+println("Infected: ", I)
+println("Immune: ", R)
+
+# Check if the population count is correct
+println("Population check: ", S + I + R == nagents(model))
