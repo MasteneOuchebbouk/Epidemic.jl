@@ -1,7 +1,13 @@
 module Epidemic
+
 using Agents
 using Random
-#using CairoMakie
-#using DataFrames
+
 include("agent.jl")
+
+# Public API
+export HealthStatus, susceptible, exposed, infected, recovered
+export Person, ModelParams
+export initialize_model, agent_step!
+
 end
