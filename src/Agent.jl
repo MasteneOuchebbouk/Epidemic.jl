@@ -1,8 +1,8 @@
+##using Epedimc #erreur 
 using Agents
 using Random
 using CairoMakie
 using DataFrames
-
 # ----------------------------------------------------
 # 1. Agent Definition
 # ----------------------------------------------------
@@ -83,44 +83,49 @@ function initialize_model(;
     return model
 end
 
-# ----------------------------------------------------
-# 3. Agent Dynamics (Step Function)
-# ----------------------------------------------------
-function agent_step!(agent::Person, model)
-    params = model.properties
+# function 1:Move an agent randomly
+ function move_agent!(agent::Person,model)
+    randomwalk!(agent,model)
+ end
+# function 2: Aging and natural death
+function aging_and_death!(agent::Person,model)
+         agent.age+=1
+        params = abmproperties(model)
+        if agent.age >= params.max_age
+            remove_agent!(agent, model)
+         return  true
+       end
 
-    # A. Aging and Natural Death
-    agent.age += 1
-    if agent.age >= params.max_age
-        remove_agent!(agent, model)
-        return
-    end
-
-    # B. Movement (Random walk to neighboring cells, including diagonals)
-    walk!(agent, rand, model)
-
-    # C. Virus Progression & Recovery
-    if agent.status == infected
+        return false
+        
+ end 
+#function 3 : update infection and immunity 
+function update_health!(agent::Person,model)
+    params = abmproperties(model) # agent based model propreties
+   if agent.status == infected
         agent.infection_timer += 1
-        if agent.infection_timer >= params.duration
+      if agent.infection_timer >= params.duration
             if rand(abmrng(model)) < params.chance_recover
                 agent.status = immune
                 agent.infection_timer = 0
                 agent.immunity_timer = 0
             else
                 remove_agent!(agent, model)
-                return
+                return true
             end
-        end
-    elseif agent.status == immune
-        agent.immunity_timer += 1
-        if agent.immunity_timer >= params.immunity_duration
+        end    
+      elseif agent.status == immune
+         agent.immunity_timer += 1
+         if agent.immunity_timer >= params.immunity_duration
             agent.status = susceptible
             agent.immunity_timer = 0
+         end    
         end
-    end
-
-    # D. Transmission: An infected agent infects susceptible co-located neighbors /case of Wearing Mask 
+        return false
+    end    
+#function 4: transmission of the virus 
+function transmit_infection!(agent::Person , model)
+    params = abmproperties(model) 
     if agent.status == infected
         # Find all agents occupying the same patch / grid cell
         for neighbor in agents_in_position(agent, model)
@@ -151,15 +156,42 @@ function agent_step!(agent::Person, model)
                 end
             end
         end
-    end
-
-    # E. Reproduction (Demographic Birth)
+    end 
+    
+end    
+# function 5: Reproduction
+function reproduce!(agent::Person,model) 
+     params = abmproperties(model) 
     if nagents(model) < params.carrying_capacity
         if rand(abmrng(model)) < params.birth_rate
             # Newborn placed at the parent's position
             add_agent!(agent.pos, model; status = susceptible, age = 0,wearing_mask=false,vaccinated=false)
         end
+    end 
+end    
+# ----------------------------------------------------
+# 3. Agent Dynamics (Step Function)
+# ----------------------------------------------------
+function agent_step!(agent::Person, model)
+  params = abmproperties(model) 
+
+    # A. Aging and Natural Death
+    if  aging_and_death!(agent,model)
+        return
+   end 
+
+    # B. Movement (Random walk to neighboring cells, including diagonals)
+    move_agent!(agent,model)
+
+    # C. Virus Progression & Recovery
+    if update_health!(agent,model)
+        return
     end
+    # D. Transmission: An infected agent infects susceptible co-located neighbors /case of Wearing Mask 
+     transmit_infection!(agent,model)
+                
+    # E. Reproduction (Demographic Birth)
+    reproduce!(agent,model)
 end
 
 # Create the model
@@ -184,9 +216,15 @@ println("Population check: ", S + I + R == nagents(model))
 for t in 1:50
   # Move the simulation forward by one tick
     step!(model, 1)    
-  N=nagents(model)
+  # Count agents by health status
+  local S = count(a -> a.status == susceptible, allagents(model))
+  local I = count(a -> a.status == infected, allagents(model))
+ local R = count(a -> a.status == immune, allagents(model))  
+ #Total Agents
+  local N=nagents(model)
  #check population consistency
  @assert S+I+R == N
  # Display the results
-   println("Tick: ", t," | S: ", S," | I: ", I," | R: ", R," | Total: ", N)
+    println("Tick: ", t," | S: ", S," | I: ", I," | R: ", R," | Total: ", N)
 end
+
