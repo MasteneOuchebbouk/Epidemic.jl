@@ -1,5 +1,13 @@
 module Epidemic
 
-# Write your package code here.
+using Agents
+using Random
+
+include("agent.jl")
+
+# Public API
+export HealthStatus, susceptible, exposed, infected, recovered
+export Person, ModelParams
+export initialize_model, agent_step!
 
 end
